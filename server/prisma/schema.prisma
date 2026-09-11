@@ -1,0 +1,667 @@
+// Parametric Demo — data model
+// DEVELOPMENT DEMO — NOT VALIDATED FOR PRODUCTION CALIBRATION USE
+// See docs/DATA_MODEL.md for the full rationale behind these choices.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum RoleName {
+  TECHNICIAN
+  DOCUMENTATION
+  MANAGER
+  ADMIN
+  AUDITOR
+}
+
+enum DocumentFamily {
+  CALIBRATION_CERTIFICATE
+  PREVENTATIVE_MAINTENANCE_REPORT
+}
+
+enum WorkflowState {
+  DRAFT
+  SUBMITTED
+  RETURNED_FOR_CORRECTION
+  RESUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  DOCUMENT_GENERATED
+  SYNCED_TO_CALIBRATION_CONTROL
+  READY_FOR_RELEASE
+  RELEASED
+}
+
+enum TemplateStatus {
+  DRAFT
+  ACTIVE_DEMO
+  RETIRED
+}
+
+enum SyncStatus {
+  QUEUED
+  SYNCING
+  SUCCESS
+  FAILED
+}
+
+enum ConditionStatus {
+  IN_TOLERANCE
+  OUT_OF_TOLERANCE
+  NOT_APPLICABLE
+}
+
+enum FinalStatus {
+  PASS
+  FAIL
+  LIMITED
+  NOT_APPLICABLE
+}
+
+enum ChecklistResult {
+  PASS
+  FAIL
+  NOT_APPLICABLE
+}
+
+enum ReviewAction {
+  RETURNED_FOR_CORRECTION
+  APPROVED
+}
+
+enum RevisionAction {
+  SUBMITTED
+  RESUBMITTED
+}
+
+enum DocumentStatus {
+  GENERATED
+  FAILED
+}
+
+enum CorrectionStatus {
+  PENDING
+  RESOLVED
+}
+
+enum EntryMode {
+  DIGITAL_FIELD
+  LEGACY_PAPER
+}
+
+// ---------------------------------------------------------------------------
+// Identity / roles
+// ---------------------------------------------------------------------------
+
+model Role {
+  id          String   @id @default(uuid())
+  name        RoleName @unique
+  description String
+  users       User[]
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  roleId       String
+  role         Role     @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  technicianTasks       CalibrationTask[]      @relation("TaskTechnician")
+  technicianRecords     CalibrationRecord[]    @relation("RecordTechnician")
+  approvals             Approval[]             @relation("ApprovedBy")
+  reviews               Review[]               @relation("ReviewedBy")
+  corrections           Correction[]           @relation("CorrectedBy")
+  generatedDocuments    GeneratedDocument[]    @relation("GeneratedBy")
+  uploadedTemplates     WordTemplateRevision[] @relation("UploadedBy")
+  auditEvents           AuditEvent[]           @relation("AuditUser")
+  createdWorkOrders     WorkOrder[]            @relation("WorkOrderCreatedBy")
+
+  @@index([roleId])
+}
+
+// ---------------------------------------------------------------------------
+// Customers / sites / assets
+// ---------------------------------------------------------------------------
+
+model Customer {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  sites     CustomerSite[]
+  contacts  CustomerContact[]
+  assets    EquipmentAsset[]
+  workOrders WorkOrder[]
+}
+
+model CustomerSite {
+  id           String   @id @default(uuid())
+  customerId   String
+  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  label        String
+  addressLine1 String
+  addressLine2 String?
+  city         String
+  state        String
+  zip          String
+  createdAt    DateTime @default(now())
+
+  contacts   CustomerContact[]
+  assets     EquipmentAsset[]
+  workOrders WorkOrder[]
+
+  @@index([customerId])
+}
+
+model CustomerContact {
+  id         String        @id @default(uuid())
+  customerId String
+  customer   Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  siteId     String?
+  site       CustomerSite? @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  name       String
+  phone      String?
+  email      String?
+
+  @@index([customerId])
+}
+
+model EquipmentAsset {
+  id                       String   @id @default(uuid())
+  customerId               String
+  customer                 Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  siteId                   String
+  site                     CustomerSite @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  assetNumber              String
+  description              String
+  manufacturer             String
+  model                    String
+  serialNumber             String
+  accuracy                 String
+  range                    String
+  defaultProcedureId       String?
+  defaultProcedure         Procedure? @relation(fields: [defaultProcedureId], references: [id], onDelete: SetNull)
+  calibrationIntervalMonths Int
+  // Fake Calibration Control cross-reference — simulates an asset already
+  // known to the legacy system, so the demo can show "already known" data.
+  ccAssetId                String?  @unique
+  createdAt                DateTime @default(now())
+
+  tasks CalibrationTask[]
+  calibrationRecords CalibrationRecord[]
+  syncEvents CalibrationControlSync[]
+
+  @@unique([customerId, assetNumber])
+  @@index([siteId])
+}
+
+// ---------------------------------------------------------------------------
+// Procedures, digital form templates, calculation/decision rule tags
+// ---------------------------------------------------------------------------
+
+model Procedure {
+  id                          String         @id @default(uuid())
+  name                        String
+  documentFamily              DocumentFamily
+  // Selects which Word view-model builder (server/src/services/wordViewModels.ts)
+  // and template folder under server/templates/ this procedure uses. Kept
+  // separate from the WordTemplateRevision file path itself so the
+  // rendering *shape* (flat groups vs. sectioned groups vs. checklist) is
+  // explicit rather than inferred from a folder name.
+  rendererKey                 String
+  // DEMO RULES ONLY — see docs/QUALITY_LIMITATIONS.md. These are string tags
+  // resolved against versioned functions in src/services/calculationRules.ts
+  // and src/services/decisionRules.ts — never trust them as production logic.
+  calculationRuleRevision     String
+  decisionRuleRevision        String
+  active                      Boolean        @default(true)
+  createdAt                   DateTime       @default(now())
+
+  digitalFormTemplateRevisionId String?
+  digitalFormTemplateRevision   DigitalFormTemplateRevision? @relation(fields: [digitalFormTemplateRevisionId], references: [id], onDelete: SetNull)
+
+  outputWordTemplateRevisionId  String?
+  outputWordTemplateRevision    WordTemplateRevision? @relation("ProcedureActiveWordTemplate", fields: [outputWordTemplateRevisionId], references: [id], onDelete: SetNull)
+
+  assets              EquipmentAsset[]
+  tasks               CalibrationTask[]
+  calibrationRecords  CalibrationRecord[]
+  wordTemplateRevisions WordTemplateRevision[] @relation("ProcedureWordTemplateRevisions")
+}
+
+model DigitalFormTemplate {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  revisions DigitalFormTemplateRevision[]
+}
+
+model DigitalFormTemplateRevision {
+  id                    String         @id @default(uuid())
+  digitalFormTemplateId String
+  digitalFormTemplate   DigitalFormTemplate @relation(fields: [digitalFormTemplateId], references: [id], onDelete: Restrict)
+  revision              String
+  // Structured description of what the technician UI renders: measurement
+  // table columns/sections, or PM checklist sections/items. See
+  // docs/WORD_TEMPLATE_ENGINE.md and docs/DATA_MODEL.md.
+  formSchema            Json
+  status                TemplateStatus @default(ACTIVE_DEMO)
+  createdAt             DateTime       @default(now())
+
+  procedures Procedure[]
+
+  @@unique([digitalFormTemplateId, revision])
+}
+
+// ---------------------------------------------------------------------------
+// Work orders / tasks
+// ---------------------------------------------------------------------------
+
+model WorkOrder {
+  id              String   @id @default(uuid())
+  customerId      String
+  customer        Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  siteId          String
+  site            CustomerSite @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  scheduledDate   DateTime
+  createdByUserId String?
+  createdBy       User?    @relation("WorkOrderCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdAt       DateTime @default(now())
+
+  tasks CalibrationTask[]
+
+  @@index([customerId])
+  @@index([scheduledDate])
+}
+
+model CalibrationTask {
+  id                  String   @id @default(uuid())
+  workOrderId         String
+  workOrder           WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
+  assetId             String
+  asset               EquipmentAsset @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  procedureId         String
+  procedure           Procedure @relation(fields: [procedureId], references: [id], onDelete: Restrict)
+  assignedTechnicianId String
+  assignedTechnician  User @relation("TaskTechnician", fields: [assignedTechnicianId], references: [id], onDelete: Restrict)
+  scheduledDate       DateTime
+  createdAt           DateTime @default(now())
+
+  calibrationRecord CalibrationRecord?
+
+  @@index([assignedTechnicianId])
+  @@index([assetId])
+}
+
+// ---------------------------------------------------------------------------
+// Calibration record (the core workflow object) + revisions
+// ---------------------------------------------------------------------------
+
+model CalibrationRecord {
+  id                     String        @id @default(uuid())
+  taskId                 String        @unique
+  task                   CalibrationTask @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  assetId                String
+  asset                  EquipmentAsset @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  procedureId            String
+  procedure              Procedure @relation(fields: [procedureId], references: [id], onDelete: Restrict)
+  technicianId           String
+  technician             User @relation("RecordTechnician", fields: [technicianId], references: [id], onDelete: Restrict)
+
+  status                 WorkflowState @default(DRAFT)
+  currentRevisionNumber  Int           @default(0)
+
+  calibrationLocation    String?
+  comments               String?
+  // Preventative-maintenance-specific fields (blank/unused for the
+  // CALIBRATION_CERTIFICATE family)
+  purposeOfVisit         String?
+  serviceRequested       String?
+
+  // Legacy remote data-entry mode (Section 18): a scanned paper worksheet
+  // can be attached and a DOCUMENTATION user transcribes into the same
+  // structured model/forms a technician would use digitally.
+  entryMode              EntryMode @default(DIGITAL_FIELD)
+  legacyScanFilename     String?
+  legacyScanStoragePath  String?
+  legacyScanUploadedAt   DateTime?
+
+  // Separate concepts — never collapse into one boolean. See Section 22 of
+  // the product brief / docs/QUALITY_LIMITATIONS.md.
+  asFoundStatus          ConditionStatus?
+  asLeftStatus           ConditionStatus?
+  adjustmentMade         Boolean?
+  finalStatus            FinalStatus?
+
+  submittedAt            DateTime?
+  approvedAt             DateTime?
+  releasedAt             DateTime?
+
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+
+  measurementSections    MeasurementSection[]
+  pmChecklistSections     PMChecklistSection[]
+  environmentalObservations EnvironmentalObservation[]
+  standardUsages         CalibrationStandardUsage[]
+  revisions              CalibrationRecordRevision[]
+  reviews                Review[]
+  corrections            Correction[]
+  approval                Approval?
+  generatedDocuments      GeneratedDocument[]
+  syncEvents              CalibrationControlSync[]
+
+  @@index([assetId])
+  @@index([technicianId])
+  @@index([status])
+}
+
+model CalibrationRecordRevision {
+  id                  String   @id @default(uuid())
+  calibrationRecordId String
+  calibrationRecord   CalibrationRecord @relation(fields: [calibrationRecordId], references: [id], onDelete: Restrict)
+  revisionNumber      Int
+  action              RevisionAction
+  snapshotJson         Json
+  createdByUserId      String?
+  createdAt            DateTime @default(now())
+
+  @@unique([calibrationRecordId, revisionNumber])
+  @@index([calibrationRecordId])
+}
+
+// ---------------------------------------------------------------------------
+// Hierarchical measurement data (Section / Group / Point)
+// ---------------------------------------------------------------------------
+
+model MeasurementSection {
+  id                   String   @id @default(uuid())
+  calibrationRecordId  String
+  calibrationRecord    CalibrationRecord @relation(fields: [calibrationRecordId], references: [id], onDelete: Restrict)
+  name                 String
+  sortOrder            Int      @default(0)
+
+  groups MeasurementGroup[]
+
+  @@index([calibrationRecordId])
+}
+
+model MeasurementGroup {
+  id            String   @id @default(uuid())
+  sectionId     String
+  section       MeasurementSection @relation(fields: [sectionId], references: [id], onDelete: Restrict)
+  parentGroupId String?
+  parentGroup   MeasurementGroup?  @relation("GroupSubgroups", fields: [parentGroupId], references: [id], onDelete: SetNull)
+  subgroups     MeasurementGroup[] @relation("GroupSubgroups")
+  name          String
+  sortOrder     Int      @default(0)
+
+  points MeasurementPoint[]
+
+  @@index([sectionId])
+  @@index([parentGroupId])
+}
+
+// A single row of calibration data. `values` is keyed by the column `key`
+// defined in the owning Procedure's calibration table definition
+// (see DigitalFormTemplateRevision.formSchema.columns). Each numeric cell
+// is stored as { numericValue, displayScale, displayValue, unit } — see
+// docs/DATA_MODEL.md "Precision" section. Never derive displayValue by
+// reformatting numericValue with default float formatting.
+model MeasurementPoint {
+  id        String   @id @default(uuid())
+  groupId   String
+  group     MeasurementGroup @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  sortOrder Int      @default(0)
+  rowLabel  String
+  values    Json
+
+  @@index([groupId])
+}
+
+// ---------------------------------------------------------------------------
+// PM checklist (Demo Type D)
+// ---------------------------------------------------------------------------
+
+model PMChecklistSection {
+  id                  String   @id @default(uuid())
+  calibrationRecordId String
+  calibrationRecord   CalibrationRecord @relation(fields: [calibrationRecordId], references: [id], onDelete: Restrict)
+  name                String
+  sortOrder           Int      @default(0)
+
+  items PMChecklistItem[]
+
+  @@index([calibrationRecordId])
+}
+
+model PMChecklistItem {
+  id        String   @id @default(uuid())
+  sectionId String
+  section   PMChecklistSection @relation(fields: [sectionId], references: [id], onDelete: Restrict)
+  sortOrder Int      @default(0)
+  label     String
+  result    ChecklistResult?
+  notes     String?
+
+  @@index([sectionId])
+}
+
+// ---------------------------------------------------------------------------
+// Environmental observations (precision-safe example field per Section 20)
+// ---------------------------------------------------------------------------
+
+model EnvironmentalObservation {
+  id                   String   @id @default(uuid())
+  calibrationRecordId  String
+  calibrationRecord    CalibrationRecord @relation(fields: [calibrationRecordId], references: [id], onDelete: Restrict)
+  parameter            String   // e.g. "temperature", "humidity"
+  unit                 String
+  numericValue         Decimal? @db.Decimal(18, 6)
+  displayScale         Int      @default(2)
+  displayValue         String?
+  asFoundStatus        ConditionStatus?
+  asLeftStatus         ConditionStatus?
+  finalStatus          FinalStatus?
+  sortOrder            Int      @default(0)
+
+  @@index([calibrationRecordId])
+}
+
+// ---------------------------------------------------------------------------
+// Reference standards
+// ---------------------------------------------------------------------------
+
+model ReferenceStandard {
+  id           String   @id @default(uuid())
+  idNumber     String   @unique
+  manufacturer String
+  model        String
+  description  String
+  calDue       DateTime
+  active       Boolean  @default(true)
+
+  usages CalibrationStandardUsage[]
+}
+
+model CalibrationStandardUsage {
+  id                   String   @id @default(uuid())
+  calibrationRecordId  String
+  calibrationRecord    CalibrationRecord @relation(fields: [calibrationRecordId], references: [id], onDelete: Restrict)
+  standardId           String
+  standard             ReferenceStandard @relation(fields: [standardId], references: [id], onDelete: Restrict)
+  sortOrder            Int      @default(0)
+
+  @@unique([calibrationRecordId, standardId])
+}
+
+// ---------------------------------------------------------------------------
+// Review / correction / approval
+// ---------------------------------------------------------------------------
+
+model Review {
+  id                   String   @id @default(uuid())
+  calibrationRecordId  String
+  calibrationRecord    CalibrationRecord @relation(fields: [calibrationRecordId], references: [id], onDelete: Restrict)
+  reviewerUserId       String
+  reviewer             User @relation("ReviewedBy", fields: [reviewerUserId], references: [id], onDelete: Restrict)
+  action               ReviewAction
+  comments             String?
+  flaggedFields        Json?    // [{ fieldRef, label, reason }] — only for RETURNED_FOR_CORRECTION
+  createdAt            DateTime @default(now())
+
+  corrections Correction[]
+
+  @@index([calibrationRecordId])
+}
+
+// One row per flagged field. Created (PENDING) the moment a manager returns
+// a field; updated (RESOLVED) when the technician corrects it. The original
+// value is captured at flag time and is never overwritten.
+model Correction {
+  id                   String   @id @default(uuid())
+  calibrationRecordId  String
+  calibrationRecord    CalibrationRecord @relation(fields: [calibrationRecordId], references: [id], onDelete: Restrict)
+  reviewId             String
+  review               Review @relation(fields: [reviewId], references: [id], onDelete: Restrict)
+  fieldRef             String   // machine-readable path, e.g. "point:<id>:asLeft"
+  fieldLabel           String   // human label, e.g. "Humidity — As Left Reading"
+  originalValueJson    Json
+  correctedValueJson   Json?
+  reason               String
+  status               CorrectionStatus @default(PENDING)
+  correctedByUserId    String?
+  correctedBy          User?    @relation("CorrectedBy", fields: [correctedByUserId], references: [id], onDelete: SetNull)
+  correctedAt          DateTime?
+  createdAt            DateTime @default(now())
+
+  @@index([calibrationRecordId])
+}
+
+model Approval {
+  id                   String   @id @default(uuid())
+  calibrationRecordId  String   @unique
+  calibrationRecord    CalibrationRecord @relation(fields: [calibrationRecordId], references: [id], onDelete: Restrict)
+  approvedByUserId     String
+  approvedBy           User @relation("ApprovedBy", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  approvedAt           DateTime @default(now())
+  notes                String?
+}
+
+// ---------------------------------------------------------------------------
+// Word template engine
+// ---------------------------------------------------------------------------
+
+model WordTemplate {
+  id             String         @id @default(uuid())
+  name           String
+  documentFamily DocumentFamily
+  createdAt      DateTime       @default(now())
+
+  revisions WordTemplateRevision[]
+}
+
+model WordTemplateRevision {
+  id              String   @id @default(uuid())
+  wordTemplateId  String
+  wordTemplate    WordTemplate @relation(fields: [wordTemplateId], references: [id], onDelete: Restrict)
+  procedureId     String?
+  procedure       Procedure? @relation("ProcedureWordTemplateRevisions", fields: [procedureId], references: [id], onDelete: SetNull)
+  revision        String
+  filename        String
+  sha256          String
+  storagePath      String
+  uploadedByUserId String?
+  uploadedBy       User?    @relation("UploadedBy", fields: [uploadedByUserId], references: [id], onDelete: SetNull)
+  uploadedAt       DateTime @default(now())
+  status           TemplateStatus @default(DRAFT)
+
+  fieldMappings      WordFieldMapping[]
+  generatedDocuments GeneratedDocument[]
+  activeForProcedures Procedure[] @relation("ProcedureActiveWordTemplate")
+
+  @@unique([wordTemplateId, revision])
+}
+
+model WordFieldMapping {
+  id                     String   @id @default(uuid())
+  wordTemplateRevisionId String
+  wordTemplateRevision   WordTemplateRevision @relation(fields: [wordTemplateRevisionId], references: [id], onDelete: Restrict)
+  fieldKey               String   // e.g. "customer.name"
+  placeholderTag         String   // e.g. "{customer_name}"
+  description            String?
+  sortOrder               Int     @default(0)
+
+  @@index([wordTemplateRevisionId])
+}
+
+model GeneratedDocument {
+  id                      String   @id @default(uuid())
+  calibrationRecordId     String
+  calibrationRecord       CalibrationRecord @relation(fields: [calibrationRecordId], references: [id], onDelete: Restrict)
+  wordTemplateRevisionId  String
+  wordTemplateRevision    WordTemplateRevision @relation(fields: [wordTemplateRevisionId], references: [id], onDelete: Restrict)
+  generatedByUserId       String
+  generatedBy             User @relation("GeneratedBy", fields: [generatedByUserId], references: [id], onDelete: Restrict)
+  generatedAt             DateTime @default(now())
+  filename                String
+  sha256                  String
+  storagePath             String
+  status                  DocumentStatus @default(GENERATED)
+  failureMessage          String?
+
+  @@index([calibrationRecordId])
+}
+
+// ---------------------------------------------------------------------------
+// Fake Calibration Control integration
+// ---------------------------------------------------------------------------
+
+model CalibrationControlSync {
+  id                   String     @id @default(uuid())
+  calibrationRecordId  String
+  calibrationRecord    CalibrationRecord @relation(fields: [calibrationRecordId], references: [id], onDelete: Restrict)
+  assetId              String
+  asset                EquipmentAsset @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  status               SyncStatus @default(QUEUED)
+  ccRecordId           String?
+  requestedAt          DateTime   @default(now())
+  syncedAt             DateTime?
+  failureMessage       String?
+  payloadJson          Json
+
+  @@index([calibrationRecordId])
+}
+
+// ---------------------------------------------------------------------------
+// Audit trail — append-only (also enforced by a DB trigger, see migration)
+// ---------------------------------------------------------------------------
+
+model AuditEvent {
+  id          String   @id @default(uuid())
+  userId      String?
+  user        User?    @relation("AuditUser", fields: [userId], references: [id], onDelete: SetNull)
+  eventType   String
+  entityType  String
+  entityId    String?
+  summary     String
+  detailsJson Json?
+  createdAt   DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}

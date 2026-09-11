@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: parametric-demo-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: parametric
+      POSTGRES_PASSWORD: parametric_demo_only
+      POSTGRES_DB: parametric_demo
+    ports:
+      - "55432:5432"
+    volumes:
+      - parametric_pgdata:/var/lib/postgresql/data
+
+volumes:
+  parametric_pgdata:

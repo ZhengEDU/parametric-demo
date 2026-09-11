@@ -1,0 +1,46 @@
+# dependencies
+node_modules/
+**/node_modules/
+
+# build output
+dist/
+build/
+**/dist/
+**/build/
+*.tsbuildinfo
+
+# env
+.env
+.env.*
+!.env.example
+
+# generated documents / uploads (demo runtime output — not source)
+server/storage/generated/*
+!server/storage/generated/.gitkeep
+server/storage/uploads/*
+!server/storage/uploads/.gitkeep
+
+# real, unsanitized source documents — NEVER commit real customer data.
+# Covers samples/ itself too, not just samples/word-documents/ — real
+# files have ended up loose directly under samples/ before.
+samples/*.docx
+samples/*.doc
+samples/*.pdf
+samples/word-documents/*.docx
+samples/word-documents/*.doc
+samples/word-documents/*.pdf
+
+# logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+
+# test artifacts
+playwright-report/
+test-results/
+coverage/
+
+# postgres data volume (if bind-mounted)
+.pgdata/

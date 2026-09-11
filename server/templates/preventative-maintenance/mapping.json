@@ -1,0 +1,23 @@
+[
+  { "fieldKey": "certificate.number", "placeholderTag": "{certificate_number}", "description": "Report number" },
+  { "fieldKey": "asset.number", "placeholderTag": "{asset_number}", "description": "Asset number" },
+  { "fieldKey": "customer.name", "placeholderTag": "{customer_name}", "description": "Customer name" },
+  { "fieldKey": "asset.description", "placeholderTag": "{asset_description}", "description": "Asset description" },
+  { "fieldKey": "customer.addressLine1", "placeholderTag": "{customer_address_line1}", "description": "Customer address line 1" },
+  { "fieldKey": "asset.manufacturer", "placeholderTag": "{asset_manufacturer}", "description": "Asset manufacturer" },
+  { "fieldKey": "customer.addressLine2", "placeholderTag": "{customer_address_line2}", "description": "Customer address line 2" },
+  { "fieldKey": "asset.model", "placeholderTag": "{asset_model}", "description": "Asset model" },
+  { "fieldKey": "customer.cityStateZip", "placeholderTag": "{customer_city_state_zip}", "description": "Customer city/state/zip" },
+  { "fieldKey": "asset.serialNumber", "placeholderTag": "{asset_serial_number}", "description": "Asset serial number" },
+  { "fieldKey": "customer.contact", "placeholderTag": "{customer_contact}", "description": "Customer contact name" },
+  { "fieldKey": "customer.phone", "placeholderTag": "{customer_phone}", "description": "Customer phone" },
+  { "fieldKey": "calibration.date", "placeholderTag": "{calibration_date}", "description": "Date of visit" },
+  { "fieldKey": "procedure.name", "placeholderTag": "{procedure_name}", "description": "Procedure name" },
+  { "fieldKey": "calibration.nextDue", "placeholderTag": "{calibration_next_due}", "description": "Next due date" },
+  { "fieldKey": "calibration.interval", "placeholderTag": "{calibration_interval}", "description": "PM interval" },
+  { "fieldKey": "calibration.location", "placeholderTag": "{calibration_location}", "description": "Service location" },
+  { "fieldKey": "purposeOfVisit", "placeholderTag": "{purpose_of_visit}", "description": "Purpose of visit" },
+  { "fieldKey": "serviceRequested", "placeholderTag": "{service_requested}", "description": "Service requested" },
+  { "fieldKey": "comments", "placeholderTag": "{comments}", "description": "Free-text comments" },
+  { "fieldKey": "sections", "placeholderTag": "{#sections}{#items}...{/items}{/sections}", "description": "PM checklist sections -> items (repeating)" }
+]
