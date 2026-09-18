@@ -12,7 +12,14 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // Runtime queries go through Neon's pooled connection (DATABASE_URL) —
+  // important on serverless, where many concurrent function invocations
+  // would otherwise each open their own Postgres connection. Migrations
+  // need a direct, unpooled connection instead: `prisma migrate deploy`
+  // takes a session-level advisory lock that Neon's pooler (PgBouncer in
+  // transaction mode) doesn't reliably support, which times out as P1002.
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ---------------------------------------------------------------------------
