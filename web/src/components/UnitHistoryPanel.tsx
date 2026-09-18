@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api/client";
+import { api, apiBase } from "../api/client";
 import { useAuth } from "../state/AuthContext";
 import { StatusBadge } from "./StatusBadge";
 import type { AssetHistoryRecord } from "../api/types";
@@ -62,7 +62,7 @@ export function UnitHistoryPanel({ assetId, excludeRecordId }: { assetId: string
                     <td><StatusBadge value={r.finalStatus} /></td>
                     <td>
                       {doc && (
-                        <a className="btn" href={`/api/documents/${doc.id}/download`} target="_blank" rel="noreferrer">
+                        <a className="btn" href={`${apiBase}/api/documents/${doc.id}/download`} target="_blank" rel="noreferrer">
                           Download
                         </a>
                       )}

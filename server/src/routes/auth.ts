@@ -23,7 +23,11 @@ authRouter.post("/login", async (req, res) => {
   const token = signToken({ userId: user.id, role: user.role.name });
   res.cookie("session", token, {
     httpOnly: true,
-    sameSite: "lax",
+    // Deployed frontend and API live on different Vercel domains, so the
+    // cookie must be SameSite=None to be sent on cross-site fetches (which
+    // in turn requires Secure — browsers reject None without it). Local
+    // dev stays Lax/non-secure since it's plain http://localhost.
+    sameSite: isProd ? "none" : "lax",
     secure: isProd,
     maxAge: 8 * 60 * 60 * 1000,
   });
@@ -38,7 +42,7 @@ authRouter.post("/login", async (req, res) => {
 });
 
 authRouter.post("/logout", requireAuth, async (req, res) => {
-  res.clearCookie("session");
+  res.clearCookie("session", { httpOnly: true, sameSite: isProd ? "none" : "lax", secure: isProd });
   await recordAuditEvent(prisma, {
     userId: req.user!.id,
     eventType: "LOGOUT",

@@ -177,7 +177,7 @@ export async function generateCertificateForRecord(recordId: string, generatedBy
   const { record, templateRevision, renderResult, rendererKey } = built;
 
   const filename = `${rendererKey}-${certificateNumber}.docx`;
-  const { storagePath } = persistGeneratedDocument(renderResult.buffer, filename);
+  const { storagePath } = await persistGeneratedDocument(renderResult.buffer, filename);
 
   const [generatedDocument] = await prisma.$transaction([
     prisma.generatedDocument.create({

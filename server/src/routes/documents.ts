@@ -47,7 +47,7 @@ documentsRouter.get("/:recordId/preview", async (req, res) => {
 documentsRouter.get("/:id/download", async (req, res) => {
   const doc = await prisma.generatedDocument.findUnique({ where: { id: req.params.id } });
   if (!doc) throw new NotFoundError("GeneratedDocument");
-  const buffer = readGeneratedDocument(doc.storagePath);
+  const buffer = await readGeneratedDocument(doc.storagePath);
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
   res.setHeader("Content-Disposition", `attachment; filename="${doc.filename.replace(/"/g, "")}"`);
   res.send(buffer);

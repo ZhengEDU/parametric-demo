@@ -8,12 +8,18 @@ export class ApiError extends Error {
   }
 }
 
+// In dev (and in a same-origin deploy) the Vite proxy / same domain makes a
+// relative "/api" path work. Deployed as two separate Vercel projects, the
+// frontend needs the API's own domain — set VITE_API_BASE_URL to that
+// origin (no trailing slash, e.g. "https://parametric-demo-api.vercel.app").
+export const apiBase = import.meta.env.VITE_API_BASE_URL ?? "";
+
 async function request<T>(method: string, path: string, body?: unknown, isFormData = false): Promise<T> {
   const headers: Record<string, string> = {};
   if (method !== "GET") headers["X-Parametric-Demo-Client"] = "1";
   if (body !== undefined && !isFormData) headers["Content-Type"] = "application/json";
 
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(`${apiBase}/api${path}`, {
     method,
     credentials: "include",
     headers,

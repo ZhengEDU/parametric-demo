@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
-import { api, ApiError } from "../api/client";
+import { api, apiBase, ApiError } from "../api/client";
 import { useAuth } from "../state/AuthContext";
 import type { WordTemplateRevision } from "../api/types";
 
@@ -16,7 +16,7 @@ export function TemplatesPage() {
   async function generateTest(id: string) {
     setError(null);
     try {
-      const res = await fetch(`/api/templates/${id}/generate-test`, {
+      const res = await fetch(`${apiBase}/api/templates/${id}/generate-test`, {
         method: "POST",
         credentials: "include",
         headers: { "X-Parametric-Demo-Client": "1" },

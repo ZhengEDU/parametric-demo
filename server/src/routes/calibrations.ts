@@ -13,8 +13,8 @@ import {
 import { ForbiddenError } from "../lib/errors";
 import multer from "multer";
 import path from "path";
-import fs from "fs";
 import { recordAuditEvent } from "../lib/audit";
+import { writeFile, readFile } from "../lib/fileStorage";
 
 export const calibrationsRouter = Router();
 calibrationsRouter.use(requireAuth);
@@ -85,7 +85,8 @@ const upload = multer({
   },
 });
 
-const SCAN_DIR = path.join(__dirname, "..", "..", "storage", "uploads");
+const SCAN_SUBDIR = "uploads";
+const SCAN_CONTENT_TYPES: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".pdf": "application/pdf" };
 
 /** Legacy remote data-entry mode (Section 18): attach a scanned worksheet
  * to a record so a documentation employee can transcribe against it. */
@@ -97,16 +98,15 @@ calibrationsRouter.post("/:id/legacy-scan", upload.single("scan"), async (req, r
     res.status(400).json({ error: "VALIDATION_ERROR", message: "No file uploaded" });
     return;
   }
-  fs.mkdirSync(SCAN_DIR, { recursive: true });
-  const safeName = `${req.params.id}-${Date.now()}${path.extname(req.file.originalname).toLowerCase()}`;
-  const fullPath = path.join(SCAN_DIR, safeName);
-  fs.writeFileSync(fullPath, req.file.buffer);
+  const ext = path.extname(req.file.originalname).toLowerCase();
+  const safeName = `${req.params.id}-${Date.now()}${ext}`;
+  const storagePath = await writeFile(SCAN_SUBDIR, safeName, req.file.buffer, SCAN_CONTENT_TYPES[ext]);
   await prisma.calibrationRecord.update({
     where: { id: req.params.id },
     data: {
       entryMode: "LEGACY_PAPER",
       legacyScanFilename: req.file.originalname,
-      legacyScanStoragePath: path.join("storage", "uploads", safeName),
+      legacyScanStoragePath: storagePath,
       legacyScanUploadedAt: new Date(),
     },
   });
@@ -127,10 +127,8 @@ calibrationsRouter.get("/:id/legacy-scan", async (req, res) => {
     res.status(404).json({ error: "NOT_FOUND", message: "No scan attached" });
     return;
   }
-  const resolved = path.resolve(__dirname, "..", "..", record.legacyScanStoragePath);
-  if (!resolved.startsWith(path.resolve(SCAN_DIR))) {
-    res.status(400).json({ error: "INVALID_PATH" });
-    return;
-  }
-  res.sendFile(resolved);
+  const buffer = await readFile(record.legacyScanStoragePath, SCAN_SUBDIR);
+  const ext = path.extname(record.legacyScanFilename ?? "").toLowerCase();
+  if (SCAN_CONTENT_TYPES[ext]) res.setHeader("Content-Type", SCAN_CONTENT_TYPES[ext]);
+  res.send(buffer);
 });

@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { api, ApiError } from "../api/client";
+import { api, apiBase, ApiError } from "../api/client";
 import { getDisplay } from "../lib/cellDisplay";
 import { isValidDecimalString, subtractDecimalStrings } from "../lib/precision";
 import { useAuth } from "../state/AuthContext";
@@ -691,7 +691,7 @@ export function RecordView({ record, onChanged }: { record: FullRecord; onChange
           <h3>Legacy Scan</h3>
           {record.legacyScanFilename && (
             <p className="small">
-              Attached: {record.legacyScanFilename} — <a href={`/api/calibrations/${record.id}/legacy-scan`} target="_blank" rel="noreferrer">view</a>
+              Attached: {record.legacyScanFilename} — <a href={`${apiBase}/api/calibrations/${record.id}/legacy-scan`} target="_blank" rel="noreferrer">view</a>
             </p>
           )}
           {(user?.role === "DOCUMENTATION" || user?.role === "ADMIN") && isTechnicianEditable && (
@@ -720,7 +720,7 @@ export function RecordView({ record, onChanged }: { record: FullRecord; onChange
           <h3>Documents &amp; Sync</h3>
           {record.generatedDocuments.map((d) => (
             <div key={d.id} className="small">
-              <a href={`/api/documents/${d.id}/download`}>{d.filename}</a> — generated {new Date(d.generatedAt).toLocaleString()}
+              <a href={`${apiBase}/api/documents/${d.id}/download`}>{d.filename}</a> — generated {new Date(d.generatedAt).toLocaleString()}
             </div>
           ))}
           {record.syncEvents.map((s) => (
@@ -735,7 +735,7 @@ export function RecordView({ record, onChanged }: { record: FullRecord; onChange
         <h3>Actions</h3>
         {(isTechnicianEditable || canReviewDecide || canGenerateDocument) && (
           <div className="btn-row" style={{ marginBottom: 10 }}>
-            <a className="btn" href={`/api/documents/${record.id}/preview`} target="_blank" rel="noreferrer">
+            <a className="btn" href={`${apiBase}/api/documents/${record.id}/preview`} target="_blank" rel="noreferrer">
               Preview Certificate
             </a>
             <span className="muted small">Opens the certificate exactly as it will print, using what's entered so far — nothing is saved by previewing.</span>

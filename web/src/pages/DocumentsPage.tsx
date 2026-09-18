@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api/client";
+import { api, apiBase } from "../api/client";
 
 interface DocumentRow {
   id: string;
@@ -49,7 +49,7 @@ export function DocumentsPage() {
                       <div className="muted small">{d.calibrationRecord.asset.assetNumber}</div>
                     </td>
                     <td>{d.calibrationRecord.procedure.name}</td>
-                    <td><a href={`/api/documents/${d.id}/download`}>{d.filename}</a></td>
+                    <td><a href={`${apiBase}/api/documents/${d.id}/download`}>{d.filename}</a></td>
                     <td>{d.generatedBy.fullName}</td>
                   </tr>
                 ))}
