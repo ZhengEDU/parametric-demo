@@ -12,7 +12,7 @@ standardsRouter.use(requireAuth);
  * `active: true` standards for the record-editing "Standards Utilized"
  * picker. Retired standards still need to show up here so their calDue
  * history/usages remain visible even after they're taken out of service. */
-standardsRouter.get("/", requireRole("ADMIN", "AUDITOR"), async (_req, res) => {
+standardsRouter.get("/", requireRole("ADMIN", "AUDITOR", "MANAGER"), async (_req, res) => {
   const standards = await prisma.referenceStandard.findMany({ orderBy: { idNumber: "asc" } });
   res.json({ standards });
 });
@@ -25,7 +25,7 @@ interface NewStandardBody {
   calDue: string;
 }
 
-standardsRouter.post("/", requireRole("ADMIN"), async (req, res) => {
+standardsRouter.post("/", requireRole("ADMIN", "MANAGER"), async (req, res) => {
   const body = req.body as NewStandardBody;
   const idNumber = body.idNumber?.trim();
   const manufacturer = body.manufacturer?.trim();
@@ -56,11 +56,11 @@ interface UpdateStandardBody {
   active?: boolean;
 }
 
-/** Admin-only correction/retirement path — never a DELETE, because a
+/** Admin/Manager correction/retirement path — never a DELETE, because a
  * standard already cited on a submitted record (CalibrationStandardUsage,
  * onDelete: Restrict) must keep existing there for traceability. Recalling
  * one from service is "set active: false", not removing the row. */
-standardsRouter.patch("/:id", requireRole("ADMIN"), async (req, res) => {
+standardsRouter.patch("/:id", requireRole("ADMIN", "MANAGER"), async (req, res) => {
   const body = req.body as UpdateStandardBody;
   const existing = await prisma.referenceStandard.findUnique({ where: { id: req.params.id } });
   if (!existing) throw new NotFoundError("ReferenceStandard");

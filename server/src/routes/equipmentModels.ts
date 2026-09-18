@@ -47,11 +47,12 @@ interface NewModelBody {
   defaultProcedureId?: string;
 }
 
-/** Admin-curated catalog entry (Admin > Models is the only screen that
- * exposes this) — this is what New Calibration's "add a new asset" typeahead
- * draws its suggestions from, so keeping it gated rather than letting every
- * tech free-add entries keeps the catalog from accumulating one-off typos. */
-equipmentModelsRouter.post("/", requireRole("ADMIN"), async (req, res) => {
+/** Admin/Manager-curated catalog entry (Admin > Models is the only screen
+ * that exposes this) — this is what New Calibration's "add a new asset"
+ * typeahead draws its suggestions from, so keeping it gated to those two
+ * roles rather than letting every tech free-add entries keeps the catalog
+ * from accumulating one-off typos. */
+equipmentModelsRouter.post("/", requireRole("ADMIN", "MANAGER"), async (req, res) => {
   const body = req.body as NewModelBody;
   const manufacturer = body.manufacturer?.trim();
   const model = body.model?.trim();
@@ -92,7 +93,7 @@ equipmentModelsRouter.post("/", requireRole("ADMIN"), async (req, res) => {
   res.status(201).json({ model: created });
 });
 
-equipmentModelsRouter.delete("/:id", requireRole("ADMIN"), async (req, res) => {
+equipmentModelsRouter.delete("/:id", requireRole("ADMIN", "MANAGER"), async (req, res) => {
   await prisma.equipmentModel.delete({ where: { id: req.params.id } });
   res.status(204).end();
 });

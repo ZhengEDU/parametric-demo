@@ -35,12 +35,18 @@ export function AllRecordsPage() {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [dueSoon, setDueSoon] = useState(false);
   const [query, setQuery] = useState("");
+  const [modelFilter, setModelFilter] = useState("");
+  const [modelsInUse, setModelsInUse] = useState<{ model: string; manufacturer: string }[]>([]);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    api.get<{ models: { model: string; manufacturer: string }[] }>("/review/models-in-use").then((r) => setModelsInUse(r.models));
+  }, []);
+
+  useEffect(() => {
     setPage(1);
-  }, [statusFilter, dueSoon, query]);
+  }, [statusFilter, dueSoon, query, modelFilter]);
 
   useEffect(() => {
     setLoading(true);
@@ -48,6 +54,7 @@ export function AllRecordsPage() {
       const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE), status: statusFilter });
       if (dueSoon) params.set("dueSoon", "true");
       if (query.trim()) params.set("q", query.trim());
+      if (modelFilter) params.set("model", modelFilter);
       api
         .get<{ records: RecordRow[]; total: number }>(`/review/all?${params.toString()}`)
         .then((r) => {
@@ -57,7 +64,7 @@ export function AllRecordsPage() {
         .finally(() => setLoading(false));
     }, 250);
     return () => clearTimeout(t);
-  }, [page, statusFilter, dueSoon, query]);
+  }, [page, statusFilter, dueSoon, query, modelFilter]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const rangeStart = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
@@ -81,12 +88,25 @@ export function AllRecordsPage() {
               ))}
             </select>
           </div>
+          <div className="field" style={{ marginBottom: 0, minWidth: 200 }}>
+            <label>Filter by model</label>
+            <select value={modelFilter} onChange={(e) => setModelFilter(e.target.value)}>
+              <option value="">All models</option>
+              {modelsInUse.map((m) => (
+                <option key={m.model} value={m.model}>{m.manufacturer} — {m.model}</option>
+              ))}
+            </select>
+          </div>
           <div className="field" style={{ marginBottom: 0 }}>
             <label>&nbsp;</label>
             <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--text)" }}>
               <input type="checkbox" style={{ width: "auto" }} checked={dueSoon} onChange={(e) => setDueSoon(e.target.checked)} />
               Due within 30 days
             </label>
+          </div>
+          <div className="field" style={{ marginBottom: 0, marginLeft: "auto" }}>
+            <label>&nbsp;</label>
+            <Link to="/admin?tab=models" className="btn">+ Add / Manage Models</Link>
           </div>
         </div>
 

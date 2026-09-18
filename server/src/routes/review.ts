@@ -31,18 +31,29 @@ reviewRouter.get("/all", requireRole("MANAGER", "ADMIN", "AUDITOR"), async (req,
   const pageSize = Math.min(200, Math.max(1, Number(req.query.pageSize) || 50));
   const status = String(req.query.status ?? "ALL");
   const q = String(req.query.q ?? "").trim();
+  const model = String(req.query.model ?? "").trim();
   const dueSoon = req.query.dueSoon === "true";
 
   const where: Prisma.CalibrationRecordWhereInput = {};
   if (status !== "ALL") where.status = status as never;
+  const assetWhere: Prisma.EquipmentAssetWhereInput = {};
   if (dueSoon) {
-    where.asset = { nextCalibrationDueAt: { lte: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) } };
+    assetWhere.nextCalibrationDueAt = { lte: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) };
   }
+  // Separate from the general search box — narrows to one specific model
+  // rather than any field, for someone who already knows what they're
+  // looking for (e.g. "every Fluke 1620A we've ever calibrated").
+  if (model) {
+    assetWhere.model = { equals: model, mode: "insensitive" };
+  }
+  if (Object.keys(assetWhere).length > 0) where.asset = assetWhere;
   if (q) {
     where.OR = [
       { asset: { assetNumber: { contains: q, mode: "insensitive" } } },
       { asset: { serialNumber: { contains: q, mode: "insensitive" } } },
       { asset: { description: { contains: q, mode: "insensitive" } } },
+      { asset: { manufacturer: { contains: q, mode: "insensitive" } } },
+      { asset: { model: { contains: q, mode: "insensitive" } } },
       { asset: { customer: { name: { contains: q, mode: "insensitive" } } } },
       { technician: { fullName: { contains: q, mode: "insensitive" } } },
     ];
@@ -65,6 +76,19 @@ reviewRouter.get("/all", requireRole("MANAGER", "ADMIN", "AUDITOR"), async (req,
     prisma.calibrationRecord.count({ where }),
   ]);
   res.json({ records, total, page, pageSize });
+});
+
+/** Distinct model values in use across the asset fleet — populates the All
+ * Records "Model" filter dropdown. Bounded by the number of distinct
+ * models, not the (potentially tens-of-thousands) record count, so this
+ * stays cheap regardless of how much history has piled up. */
+reviewRouter.get("/models-in-use", requireRole("MANAGER", "ADMIN", "AUDITOR"), async (_req, res) => {
+  const rows = await prisma.equipmentAsset.findMany({
+    distinct: ["model"],
+    select: { model: true, manufacturer: true },
+    orderBy: { model: "asc" },
+  });
+  res.json({ models: rows });
 });
 
 reviewRouter.post("/:id/open", requireRole("MANAGER", "ADMIN"), async (req, res) => {
