@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { api, ApiError } from "../api/client";
-import type { Customer, CustomerSite, EquipmentAsset, Procedure } from "../api/types";
+import type { Customer, CustomerSite, EquipmentAsset, EquipmentModel, Procedure } from "../api/types";
 
 const TODAY = new Date().toISOString().slice(0, 10);
 
@@ -35,6 +35,14 @@ export function NewJobPage() {
     range: "",
     calibrationIntervalMonths: "12",
   });
+
+  // Model catalog typeahead — lets a tech adding a new asset type e.g.
+  // "A01000X" and get "A01-000X" suggested back (see normalizeModelText on
+  // the server), then autofill manufacturer/accuracy/range/interval/
+  // procedure from the catalog entry instead of retyping a spec sheet.
+  const [modelSuggestions, setModelSuggestions] = useState<EquipmentModel[]>([]);
+  const [showModelSuggestions, setShowModelSuggestions] = useState(false);
+  const modelBlurTimer = useRef<ReturnType<typeof setTimeout>>();
 
   // Procedure + schedule
   const [procedures, setProcedures] = useState<Procedure[]>([]);
@@ -76,6 +84,33 @@ export function NewJobPage() {
   const isNewCustomer = customerId === "__new__";
   const isNewSite = siteId === "__new__";
   const isNewAsset = assetId === "__new__";
+
+  useEffect(() => {
+    if (!isNewAsset || !newAsset.model.trim()) {
+      setModelSuggestions([]);
+      return;
+    }
+    const t = setTimeout(() => {
+      api
+        .get<{ models: EquipmentModel[] }>(`/equipment-models?q=${encodeURIComponent(newAsset.model.trim())}`)
+        .then((r) => setModelSuggestions(r.models));
+    }, 200);
+    return () => clearTimeout(t);
+  }, [isNewAsset, newAsset.model]);
+
+  function selectModelSuggestion(m: EquipmentModel) {
+    setNewAsset({
+      ...newAsset,
+      manufacturer: m.manufacturer,
+      model: m.model,
+      accuracy: m.accuracy ?? newAsset.accuracy,
+      range: m.range ?? newAsset.range,
+      calibrationIntervalMonths: m.calibrationIntervalMonths != null ? String(m.calibrationIntervalMonths) : newAsset.calibrationIntervalMonths,
+    });
+    if (m.defaultProcedureId) setProcedureId(m.defaultProcedureId);
+    setShowModelSuggestions(false);
+    setModelSuggestions([]);
+  }
 
   async function handleSubmit() {
     setError(null);
@@ -212,7 +247,42 @@ export function NewJobPage() {
               <div className="field"><label>Asset number</label><input type="text" value={newAsset.assetNumber} onChange={(e) => setNewAsset({ ...newAsset, assetNumber: e.target.value })} /></div>
               <div className="field"><label>Description</label><input type="text" value={newAsset.description} onChange={(e) => setNewAsset({ ...newAsset, description: e.target.value })} /></div>
               <div className="field"><label>Manufacturer</label><input type="text" value={newAsset.manufacturer} onChange={(e) => setNewAsset({ ...newAsset, manufacturer: e.target.value })} /></div>
-              <div className="field"><label>Model</label><input type="text" value={newAsset.model} onChange={(e) => setNewAsset({ ...newAsset, model: e.target.value })} /></div>
+              <div className="field typeahead">
+                <label>Model</label>
+                <input
+                  type="text"
+                  value={newAsset.model}
+                  onChange={(e) => {
+                    setNewAsset({ ...newAsset, model: e.target.value });
+                    setShowModelSuggestions(true);
+                  }}
+                  onFocus={() => setShowModelSuggestions(true)}
+                  onBlur={() => {
+                    // Delay so a click on a suggestion registers before the list unmounts.
+                    modelBlurTimer.current = setTimeout(() => setShowModelSuggestions(false), 150);
+                  }}
+                  placeholder="Type to match the catalog…"
+                  autoComplete="off"
+                />
+                {showModelSuggestions && modelSuggestions.length > 0 && (
+                  <div className="typeahead-menu">
+                    {modelSuggestions.map((m) => (
+                      <div
+                        key={m.id}
+                        className="typeahead-item"
+                        onMouseDown={(e) => {
+                          e.preventDefault(); // keep the input's focus/blur from firing before the click
+                          clearTimeout(modelBlurTimer.current);
+                          selectModelSuggestion(m);
+                        }}
+                      >
+                        <div className="model">{m.model}</div>
+                        <div className="manufacturer">{m.manufacturer}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="field"><label>Serial number</label><input type="text" value={newAsset.serialNumber} onChange={(e) => setNewAsset({ ...newAsset, serialNumber: e.target.value })} /></div>
               <div className="field"><label>Accuracy</label><input type="text" value={newAsset.accuracy} onChange={(e) => setNewAsset({ ...newAsset, accuracy: e.target.value })} /></div>
               <div className="field"><label>Range</label><input type="text" value={newAsset.range} onChange={(e) => setNewAsset({ ...newAsset, range: e.target.value })} /></div>

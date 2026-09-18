@@ -215,6 +215,30 @@ model EquipmentAsset {
   @@index([nextCalibrationDueAt])
 }
 
+// A curated catalog of known manufacturer/model combinations, managed from
+// Admin > Models. Lets the "New Calibration" intake form suggest-and-autofill
+// manufacturer/accuracy/range/interval/procedure instead of a tech re-typing
+// the same spec sheet by hand for every new asset of a model already on file.
+model EquipmentModel {
+  id                        String   @id @default(uuid())
+  manufacturer              String
+  model                     String
+  // Uppercased, punctuation-stripped copy of `model` (e.g. "A01-000X" ->
+  // "A01000X") so a tech typing "A01000X" still matches a catalog entry
+  // stored as "A01-000X" — see normalizeModelText() in equipmentModels.ts.
+  modelNormalized           String
+  description               String?
+  accuracy                  String?
+  range                     String?
+  calibrationIntervalMonths Int?
+  defaultProcedureId        String?
+  defaultProcedure          Procedure? @relation(fields: [defaultProcedureId], references: [id], onDelete: SetNull)
+  createdAt                 DateTime @default(now())
+
+  @@unique([manufacturer, model])
+  @@index([modelNormalized])
+}
+
 // ---------------------------------------------------------------------------
 // Procedures, digital form templates, calculation/decision rule tags
 // ---------------------------------------------------------------------------
@@ -246,6 +270,7 @@ model Procedure {
   assets              EquipmentAsset[]
   tasks               CalibrationTask[]
   calibrationRecords  CalibrationRecord[]
+  equipmentModels     EquipmentModel[]
   wordTemplateRevisions WordTemplateRevision[] @relation("ProcedureWordTemplateRevisions")
 }
 

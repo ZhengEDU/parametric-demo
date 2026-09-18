@@ -189,6 +189,30 @@ export interface Procedure {
   digitalFormTemplateRevision?: { id: string; formSchema: FormSchema } | null;
 }
 
+export interface AssetHistoryRecord {
+  id: string;
+  status: string;
+  finalStatus: string | null;
+  submittedAt: string | null;
+  createdAt: string;
+  approval: { approvedAt: string } | null;
+  procedure: { id: string; name: string };
+  technician: { id: string; fullName: string };
+  generatedDocuments: { id: string; filename: string; generatedAt: string }[];
+}
+
+export interface EquipmentModel {
+  id: string;
+  manufacturer: string;
+  model: string;
+  description: string | null;
+  accuracy: string | null;
+  range: string | null;
+  calibrationIntervalMonths: number | null;
+  defaultProcedureId: string | null;
+  defaultProcedure: Procedure | null;
+}
+
 export interface WorkOrder {
   id: string;
   scheduledDate: string;

@@ -4,6 +4,7 @@ import { getDisplay } from "../lib/cellDisplay";
 import { isValidDecimalString, subtractDecimalStrings } from "../lib/precision";
 import { useAuth } from "../state/AuthContext";
 import { StatusBadge } from "./StatusBadge";
+import { UnitHistoryPanel } from "./UnitHistoryPanel";
 import type { FormColumn, FullRecord, ReferenceStandard } from "../api/types";
 
 interface Flag {
@@ -313,6 +314,8 @@ export function RecordView({ record, onChanged }: { record: FullRecord; onChange
           <div className="field"><label>Next Calibration Due</label>{record.asset.nextCalibrationDueAt ? new Date(record.asset.nextCalibrationDueAt).toLocaleDateString() : "—"}</div>
         </div>
       </div>
+
+      <UnitHistoryPanel assetId={record.asset.id} excludeRecordId={record.id} />
 
       {record.corrections.length > 0 && (
         <div className="panel">

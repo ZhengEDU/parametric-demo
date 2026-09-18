@@ -7,6 +7,8 @@ import path from "path";
 import { authRouter } from "./routes/auth";
 import { jobsRouter } from "./routes/jobs";
 import { intakeRouter } from "./routes/intake";
+import { equipmentModelsRouter } from "./routes/equipmentModels";
+import { assetsRouter } from "./routes/assets";
 import { calibrationsRouter } from "./routes/calibrations";
 import { reviewRouter } from "./routes/review";
 import { documentsRouter } from "./routes/documents";
@@ -37,6 +39,8 @@ app.get("/api/health", (_req, res) => {
 app.use("/api/auth", authRouter);
 app.use("/api/jobs", jobsRouter);
 app.use("/api/intake", intakeRouter);
+app.use("/api/equipment-models", equipmentModelsRouter);
+app.use("/api/assets", assetsRouter);
 app.use("/api/calibrations", calibrationsRouter);
 app.use("/api/review", reviewRouter);
 app.use("/api/documents", documentsRouter);

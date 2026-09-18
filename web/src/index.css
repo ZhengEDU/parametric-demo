@@ -133,6 +133,27 @@ label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom
 .field-row { display: flex; gap: 12px; flex-wrap: wrap; }
 .field-row .field { flex: 1; min-width: 180px; }
 
+.typeahead { position: relative; }
+.typeahead-menu {
+  position: absolute;
+  z-index: 20;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 2px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  max-height: 220px;
+  overflow-y: auto;
+}
+.typeahead-item { padding: 7px 10px; cursor: pointer; font-size: 13px; border-bottom: 1px solid var(--border); }
+.typeahead-item:last-child { border-bottom: none; }
+.typeahead-item:hover, .typeahead-item.active { background: var(--neutral-bg); }
+.typeahead-item .model { font-weight: 600; }
+.typeahead-item .manufacturer { color: var(--text-muted); font-size: 11px; }
+
 .login-wrap { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
 .login-card { width: 340px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 28px; }
 .login-card h1 { text-align: center; margin-bottom: 4px; }
