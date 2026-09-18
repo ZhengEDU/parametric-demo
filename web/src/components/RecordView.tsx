@@ -235,6 +235,32 @@ export function RecordView({ record, onChanged }: { record: FullRecord; onChange
       onChanged(res.record);
     });
   }
+  async function handleAddPoint(groupId: string) {
+    await withBusy(`addpoint-${groupId}`, async () => {
+      const res = await api.post<{ record: FullRecord }>(`/calibrations/${record.id}/points`, { groupId });
+      onChanged(res.record);
+    });
+  }
+  async function handleRemovePoint(pointId: string) {
+    await withBusy(`rmpoint-${pointId}`, async () => {
+      const res = await api.delete<{ record: FullRecord }>(`/calibrations/${record.id}/points/${pointId}`);
+      onChanged(res.record);
+    });
+  }
+  async function handleAddChecklistItem(sectionId: string) {
+    const label = window.prompt("Checklist item label:");
+    if (!label || !label.trim()) return;
+    await withBusy(`additem-${sectionId}`, async () => {
+      const res = await api.post<{ record: FullRecord }>(`/calibrations/${record.id}/checklist-items`, { sectionId, label: label.trim() });
+      onChanged(res.record);
+    });
+  }
+  async function handleRemoveChecklistItem(itemId: string) {
+    await withBusy(`rmitem-${itemId}`, async () => {
+      const res = await api.delete<{ record: FullRecord }>(`/calibrations/${record.id}/checklist-items/${itemId}`);
+      onChanged(res.record);
+    });
+  }
   async function handleUploadScan() {
     if (!scanFile) return;
     await withBusy("scan", async () => {
@@ -274,10 +300,17 @@ export function RecordView({ record, onChanged }: { record: FullRecord; onChange
       <div className="panel">
         <h3>Asset</h3>
         <div className="field-row">
+          <div className="field"><label>Asset ID</label>{record.asset.assetNumber}</div>
           <div className="field"><label>Manufacturer / Model</label>{record.asset.manufacturer} {record.asset.model}</div>
           <div className="field"><label>Serial Number</label>{record.asset.serialNumber}</div>
+          <div className="field"><label>Site</label>{record.asset.site.label}</div>
           <div className="field"><label>Technician</label>{record.technician.fullName}</div>
           <div className="field"><label>Entry Mode</label>{record.entryMode.replaceAll("_", " ")}</div>
+        </div>
+        <div className="field-row">
+          <div className="field"><label>Calibration Interval</label>{record.asset.calibrationIntervalMonths} months</div>
+          <div className="field"><label>Last Calibrated</label>{record.asset.lastCalibratedAt ? new Date(record.asset.lastCalibratedAt).toLocaleDateString() : "—"}</div>
+          <div className="field"><label>Next Calibration Due</label>{record.asset.nextCalibrationDueAt ? new Date(record.asset.nextCalibrationDueAt).toLocaleDateString() : "—"}</div>
         </div>
       </div>
 
@@ -314,6 +347,7 @@ export function RecordView({ record, onChanged }: { record: FullRecord; onChange
                               <th key={c.key}>{c.label}</th>
                             ))}
                             {isManager && <th>Flag</th>}
+                            {isTechnicianEditable && <th></th>}
                           </tr>
                         </thead>
                         <tbody>
@@ -370,10 +404,23 @@ export function RecordView({ record, onChanged }: { record: FullRecord; onChange
                                       </button>
                                     </td>
                                   )}
+                                  {isTechnicianEditable && (
+                                    <td>
+                                      <button
+                                        type="button"
+                                        className="flag-btn"
+                                        title="Remove row"
+                                        onClick={() => handleRemovePoint(point.id)}
+                                        disabled={busy !== null}
+                                      >
+                                        ✕
+                                      </button>
+                                    </td>
+                                  )}
                                 </tr>
                                 {flagged && (
                                   <tr>
-                                    <td colSpan={cols.length + 2}>
+                                    <td colSpan={1 + cols.length + (isManager ? 1 : 0) + (isTechnicianEditable ? 1 : 0)}>
                                       <input
                                         type="text"
                                         placeholder="Reason for flagging this row"
@@ -385,7 +432,7 @@ export function RecordView({ record, onChanged }: { record: FullRecord; onChange
                                 )}
                                 {pendingHere?.map((c) => (
                                   <tr key={c.id}>
-                                    <td colSpan={cols.length + (isManager ? 2 : 1)}>
+                                    <td colSpan={1 + cols.length + (isManager ? 1 : 0) + (isTechnicianEditable ? 1 : 0)}>
                                       <div className="correction-note">Flagged: {c.reason}</div>
                                     </td>
                                   </tr>
@@ -397,6 +444,11 @@ export function RecordView({ record, onChanged }: { record: FullRecord; onChange
                       </table>
                     </div>
                     {showResult && null}
+                    {isTechnicianEditable && (
+                      <button type="button" style={{ marginTop: 6 }} onClick={() => handleAddPoint(group.id)} disabled={busy !== null}>
+                        + Add Row
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -419,6 +471,7 @@ export function RecordView({ record, onChanged }: { record: FullRecord; onChange
                       <th style={{ width: 120 }}>Result</th>
                       <th>Notes</th>
                       {isManager && <th>Flag</th>}
+                      {isTechnicianEditable && <th></th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -426,6 +479,7 @@ export function RecordView({ record, onChanged }: { record: FullRecord; onChange
                       const v = checklistValues[item.id] ?? { result: "", notes: "" };
                       const fieldRef = `checklist:${item.id}`;
                       const flagged = flags.some((f) => f.fieldRef === fieldRef);
+                      const totalCols = 3 + (isManager ? 1 : 0) + (isTechnicianEditable ? 1 : 0);
                       return (
                         <Fragment key={item.id}>
                           <tr>
@@ -456,10 +510,17 @@ export function RecordView({ record, onChanged }: { record: FullRecord; onChange
                                 </button>
                               </td>
                             )}
+                            {isTechnicianEditable && (
+                              <td>
+                                <button type="button" className="flag-btn" title="Remove item" onClick={() => handleRemoveChecklistItem(item.id)} disabled={busy !== null}>
+                                  ✕
+                                </button>
+                              </td>
+                            )}
                           </tr>
                           {flagged && (
                             <tr>
-                              <td colSpan={4}>
+                              <td colSpan={totalCols}>
                                 <input type="text" placeholder="Reason" value={flags.find((f) => f.fieldRef === fieldRef)?.reason ?? ""} onChange={(e) => setFlagReason(fieldRef, e.target.value)} />
                               </td>
                             </tr>
@@ -470,6 +531,11 @@ export function RecordView({ record, onChanged }: { record: FullRecord; onChange
                   </tbody>
                 </table>
               </div>
+              {isTechnicianEditable && (
+                <button type="button" style={{ marginTop: 6 }} onClick={() => handleAddChecklistItem(section.id)} disabled={busy !== null}>
+                  + Add Item
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -664,6 +730,14 @@ export function RecordView({ record, onChanged }: { record: FullRecord; onChange
 
       <div className="panel">
         <h3>Actions</h3>
+        {(isTechnicianEditable || canReviewDecide || canGenerateDocument) && (
+          <div className="btn-row" style={{ marginBottom: 10 }}>
+            <a className="btn" href={`/api/documents/${record.id}/preview`} target="_blank" rel="noreferrer">
+              Preview Certificate
+            </a>
+            <span className="muted small">Opens the certificate exactly as it will print, using what's entered so far — nothing is saved by previewing.</span>
+          </div>
+        )}
         {isTechnicianEditable && (
           <div className="btn-row">
             <button onClick={handleSaveDraft} disabled={busy !== null}>{busy === "save" ? "Saving…" : "Save Draft"}</button>

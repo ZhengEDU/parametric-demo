@@ -2,7 +2,14 @@ import { Router } from "express";
 import { prisma } from "../lib/prisma";
 import { requireAuth } from "../auth/middleware";
 import { loadFullRecord } from "../services/recordSerializer";
-import { saveDraft, submitRecord } from "../services/calibrationWorkflow";
+import {
+  saveDraft,
+  submitRecord,
+  addMeasurementPoint,
+  removeMeasurementPoint,
+  addChecklistItem,
+  removeChecklistItem,
+} from "../services/calibrationWorkflow";
 import { ForbiddenError } from "../lib/errors";
 import multer from "multer";
 import path from "path";
@@ -40,6 +47,28 @@ calibrationsRouter.post("/:id/submit", async (req, res) => {
   const record = await submitRecord(req.params.id, req.user!);
   const full = await loadFullRecord(record!.id);
   res.json({ record: full });
+});
+
+calibrationsRouter.post("/:id/points", async (req, res) => {
+  const { groupId, rowLabel } = req.body ?? {};
+  const record = await addMeasurementPoint(req.params.id, req.user!, groupId, rowLabel);
+  res.json({ record: await loadFullRecord(record!.id) });
+});
+
+calibrationsRouter.delete("/:id/points/:pointId", async (req, res) => {
+  const record = await removeMeasurementPoint(req.params.id, req.user!, req.params.pointId);
+  res.json({ record: await loadFullRecord(record!.id) });
+});
+
+calibrationsRouter.post("/:id/checklist-items", async (req, res) => {
+  const { sectionId, label } = req.body ?? {};
+  const record = await addChecklistItem(req.params.id, req.user!, sectionId, label ?? "");
+  res.json({ record: await loadFullRecord(record!.id) });
+});
+
+calibrationsRouter.delete("/:id/checklist-items/:itemId", async (req, res) => {
+  const record = await removeChecklistItem(req.params.id, req.user!, req.params.itemId);
+  res.json({ record: await loadFullRecord(record!.id) });
 });
 
 const upload = multer({

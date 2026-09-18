@@ -198,6 +198,12 @@ model EquipmentAsset {
   // Fake Calibration Control cross-reference — simulates an asset already
   // known to the legacy system, so the demo can show "already known" data.
   ccAssetId                String?  @unique
+  // Denormalized off the asset's most recent APPROVED CalibrationRecord (see
+  // approveRecord() in calibrationWorkflow.ts) so "what's due soon" can be
+  // queried/sorted across tens of thousands of assets without recomputing
+  // from every historical record on each request.
+  lastCalibratedAt        DateTime?
+  nextCalibrationDueAt    DateTime?
   createdAt                DateTime @default(now())
 
   tasks CalibrationTask[]
@@ -206,6 +212,7 @@ model EquipmentAsset {
 
   @@unique([customerId, assetNumber])
   @@index([siteId])
+  @@index([nextCalibrationDueAt])
 }
 
 // ---------------------------------------------------------------------------
@@ -368,6 +375,7 @@ model CalibrationRecord {
   @@index([assetId])
   @@index([technicianId])
   @@index([status])
+  @@index([updatedAt])
 }
 
 model CalibrationRecordRevision {

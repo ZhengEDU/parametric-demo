@@ -4,6 +4,7 @@ import { Layout } from "./components/Layout";
 import { LoginPage } from "./pages/LoginPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { MyJobsPage } from "./pages/MyJobsPage";
+import { NewJobPage } from "./pages/NewJobPage";
 import { JobDetailPage } from "./pages/JobDetailPage";
 import { RecordDetailPage } from "./pages/RecordDetailPage";
 import { ReviewQueuePage } from "./pages/ReviewQueuePage";
@@ -33,6 +34,7 @@ function AppRoutes() {
       >
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/jobs" element={<MyJobsPage />} />
+        <Route path="/jobs/new" element={<NewJobPage />} />
         <Route path="/jobs/:taskId" element={<JobDetailPage />} />
         <Route path="/records" element={<AllRecordsPage />} />
         <Route path="/records/:recordId" element={<RecordDetailPage />} />

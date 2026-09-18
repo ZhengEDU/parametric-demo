@@ -1,9 +1,9 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma";
 import { requireAuth, requireRole } from "../auth/middleware";
-import { generateCertificateForRecord } from "../services/documentGeneration";
+import { generateCertificateForRecord, previewCertificateForRecord } from "../services/documentGeneration";
 import { readGeneratedDocument } from "../services/wordRenderer";
-import { NotFoundError } from "../lib/errors";
+import { NotFoundError, ForbiddenError } from "../lib/errors";
 import { loadFullRecord } from "../services/recordSerializer";
 
 export const documentsRouter = Router();
@@ -24,6 +24,21 @@ documentsRouter.get("/", async (_req, res) => {
 documentsRouter.post("/:recordId/generate", requireRole("MANAGER", "ADMIN"), async (req, res) => {
   const doc = await generateCertificateForRecord(req.params.recordId, req.user!.id);
   res.json({ document: doc, record: await loadFullRecord(req.params.recordId) });
+});
+
+/** Lets the assigned technician pull up the exact certificate their entered
+ * data would produce, before they submit — same template/renderer as the
+ * real post-approval generation, but nothing is persisted or transitioned. */
+documentsRouter.get("/:recordId/preview", async (req, res) => {
+  const record = await prisma.calibrationRecord.findUnique({ where: { id: req.params.recordId }, select: { technicianId: true } });
+  if (!record) throw new NotFoundError("CalibrationRecord");
+  if (!["MANAGER", "ADMIN"].includes(req.user!.role) && record.technicianId !== req.user!.id) {
+    throw new ForbiddenError("You cannot preview another technician's calibration record");
+  }
+  const { buffer, filename } = await previewCertificateForRecord(req.params.recordId);
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.send(buffer);
 });
 
 /** Never exposes the raw storagePath — looks it up server-side by

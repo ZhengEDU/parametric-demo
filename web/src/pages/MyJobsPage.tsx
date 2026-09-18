@@ -14,7 +14,10 @@ export function MyJobsPage() {
 
   return (
     <div>
-      <h1>My Jobs</h1>
+      <div className="panel-header">
+        <h1>My Jobs</h1>
+        <Link to="/jobs/new" className="btn primary">+ New Calibration</Link>
+      </div>
       <div className="panel">
         {!tasks ? (
           <div className="empty-state">Loading…</div>

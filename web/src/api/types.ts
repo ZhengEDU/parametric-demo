@@ -159,6 +159,9 @@ export interface EquipmentAsset {
   range: string;
   calibrationIntervalMonths: number;
   ccAssetId: string | null;
+  defaultProcedureId?: string | null;
+  lastCalibratedAt?: string | null;
+  nextCalibrationDueAt?: string | null;
   customer: Customer;
   site: CustomerSite;
 }

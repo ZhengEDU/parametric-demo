@@ -4,6 +4,7 @@ import { assertTransition } from "./workflowStateMachine";
 import { runDecisionRule } from "./decisionRules";
 import { NotFoundError, ForbiddenError, ValidationError } from "../lib/errors";
 import { isValidDecimalString, subtractDecimalStrings } from "../lib/precision";
+import { addMonths } from "../lib/dates";
 import { COL } from "./measurementColumnKeys";
 import type { AuthedUser } from "../auth/middleware";
 
@@ -152,6 +153,65 @@ export async function saveDraft(recordId: string, user: AuthedUser, input: SaveD
     });
   });
 
+  return loadRecordOr404(recordId);
+}
+
+function assertEditable(record: { technicianId: string; status: string }, user: AuthedUser) {
+  if (record.technicianId !== user.id && user.role !== "DOCUMENTATION" && user.role !== "ADMIN") {
+    throw new ForbiddenError("Only the assigned technician (or documentation staff, for legacy entry) can edit this record");
+  }
+  if (record.status !== "DRAFT" && record.status !== "RETURNED_FOR_CORRECTION") {
+    throw new ValidationError(`Cannot edit a record in status ${record.status}`);
+  }
+}
+
+export async function addMeasurementPoint(recordId: string, user: AuthedUser, groupId: string, rowLabel: string | undefined) {
+  const record = await prisma.calibrationRecord.findUniqueOrThrow({ where: { id: recordId } });
+  assertEditable(record, user);
+  const group = await prisma.measurementGroup.findUnique({
+    where: { id: groupId },
+    include: { section: true, points: { select: { sortOrder: true } } },
+  });
+  if (!group || group.section.calibrationRecordId !== recordId) throw new NotFoundError("MeasurementGroup");
+  const sortOrder = group.points.reduce((max, p) => Math.max(max, p.sortOrder), -1) + 1;
+  await prisma.measurementPoint.create({
+    data: { groupId, sortOrder, rowLabel: rowLabel?.trim() || `Point ${sortOrder + 1}`, values: {} },
+  });
+  return loadRecordOr404(recordId);
+}
+
+export async function removeMeasurementPoint(recordId: string, user: AuthedUser, pointId: string) {
+  const record = await prisma.calibrationRecord.findUniqueOrThrow({ where: { id: recordId } });
+  assertEditable(record, user);
+  const point = await prisma.measurementPoint.findUnique({
+    where: { id: pointId },
+    include: { group: { include: { section: true } } },
+  });
+  if (!point || point.group.section.calibrationRecordId !== recordId) throw new NotFoundError("MeasurementPoint");
+  await prisma.measurementPoint.delete({ where: { id: pointId } });
+  return loadRecordOr404(recordId);
+}
+
+export async function addChecklistItem(recordId: string, user: AuthedUser, sectionId: string, label: string) {
+  const record = await prisma.calibrationRecord.findUniqueOrThrow({ where: { id: recordId } });
+  assertEditable(record, user);
+  const section = await prisma.pMChecklistSection.findUnique({
+    where: { id: sectionId },
+    include: { items: { select: { sortOrder: true } } },
+  });
+  if (!section || section.calibrationRecordId !== recordId) throw new NotFoundError("PMChecklistSection");
+  if (!label.trim()) throw new ValidationError("Checklist item label is required");
+  const sortOrder = section.items.reduce((max, i) => Math.max(max, i.sortOrder), -1) + 1;
+  await prisma.pMChecklistItem.create({ data: { sectionId, sortOrder, label: label.trim() } });
+  return loadRecordOr404(recordId);
+}
+
+export async function removeChecklistItem(recordId: string, user: AuthedUser, itemId: string) {
+  const record = await prisma.calibrationRecord.findUniqueOrThrow({ where: { id: recordId } });
+  assertEditable(record, user);
+  const item = await prisma.pMChecklistItem.findUnique({ where: { id: itemId }, include: { section: true } });
+  if (!item || item.section.calibrationRecordId !== recordId) throw new NotFoundError("PMChecklistItem");
+  await prisma.pMChecklistItem.delete({ where: { id: itemId } });
   return loadRecordOr404(recordId);
 }
 
@@ -325,11 +385,15 @@ export async function returnForCorrection(recordId: string, manager: AuthedUser,
 }
 
 export async function approveRecord(recordId: string, manager: AuthedUser, comments: string | undefined) {
-  const record = await prisma.calibrationRecord.findUniqueOrThrow({ where: { id: recordId } });
+  const record = await prisma.calibrationRecord.findUniqueOrThrow({ where: { id: recordId }, include: { asset: true } });
   if (record.technicianId === manager.id) {
     throw new ForbiddenError("A technician cannot approve their own calibration record");
   }
   const toState = assertTransition(record.status, "APPROVE");
+  // The calibration date is the date the work was actually performed, same
+  // definition used for the printed certificate (documentGeneration.ts).
+  const calibrationDate = record.submittedAt ?? record.createdAt;
+  const nextDue = addMonths(calibrationDate, record.asset.calibrationIntervalMonths);
 
   await prisma.$transaction(async (tx) => {
     await tx.review.create({
@@ -339,6 +403,14 @@ export async function approveRecord(recordId: string, manager: AuthedUser, comme
       data: { calibrationRecordId: recordId, approvedByUserId: manager.id, notes: comments },
     });
     await tx.calibrationRecord.update({ where: { id: recordId }, data: { status: toState, approvedAt: new Date() } });
+    // Guard against an out-of-order approval (e.g. an older resubmission
+    // approved after a newer one) regressing the asset's due date.
+    if (!record.asset.lastCalibratedAt || calibrationDate >= record.asset.lastCalibratedAt) {
+      await tx.equipmentAsset.update({
+        where: { id: record.assetId },
+        data: { lastCalibratedAt: calibrationDate, nextCalibrationDueAt: nextDue },
+      });
+    }
     await recordAuditEvent(tx, {
       userId: manager.id,
       eventType: "APPROVED",

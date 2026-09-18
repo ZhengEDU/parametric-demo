@@ -11,6 +11,7 @@ import {
   type SectionRecord,
 } from "./wordViewModels";
 import path from "path";
+import { addMonths } from "../lib/dates";
 
 function formatMonthYear(d: Date): string {
   return d.toLocaleDateString("en-US", { month: "short", year: "numeric" }).replace(" ", "");
@@ -26,7 +27,6 @@ function formatYYYYMMDD(d: Date): string {
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}${m}${day}`;
 }
-
 /**
  * Real Parametric certificate numbers are `{calibration date, YYYYMMDD}.
  * {global sequence, zero-padded to 3+ digits}` — confirmed across all 7
@@ -42,7 +42,12 @@ async function nextCertificateNumber(calibrationDate: Date): Promise<string> {
   return `${formatYYYYMMDD(calibrationDate)}.${String(seq).padStart(3, "0")}`;
 }
 
-export async function generateCertificateForRecord(recordId: string, generatedByUserId: string) {
+/** Shared render pipeline for both the real post-approval "Generate
+ * Document" action and the pre-submission preview a technician can pull up
+ * for themselves — same template, same data, so what the tech confirms is
+ * exactly what a manager's later "Generate Document" will produce (modulo
+ * the certificate number, which preview never allocates). */
+async function renderCertificateBuffer(recordId: string, certificateNumber: string) {
   const record = await prisma.calibrationRecord.findUnique({
     where: { id: recordId },
     include: {
@@ -64,7 +69,6 @@ export async function generateCertificateForRecord(recordId: string, generatedBy
   if (!templateRevision) throw new ValidationError("Procedure has no active Word template revision configured");
 
   const calibrationDate = record.submittedAt ?? record.createdAt;
-  const certificateNumber = await nextCertificateNumber(calibrationDate);
 
   const common: CommonRecordFields = {
     certificateNumber,
@@ -140,12 +144,23 @@ export async function generateCertificateForRecord(recordId: string, generatedBy
       throw new ValidationError(`Unknown rendererKey: ${record.procedure.rendererKey}`);
   }
 
-  const toState = assertTransition(record.status, "GENERATE_DOCUMENT");
   const templateFilePath = path.resolve(__dirname, "..", "..", templateRevision.storagePath);
+  const renderResult = renderWordTemplate(templateFilePath, data);
 
-  let renderResult;
+  return { record, templateRevision, renderResult, rendererKey: record.procedure.rendererKey };
+}
+
+/** Manager-facing, post-approval action: renders the certificate, persists
+ * it as a GeneratedDocument, and advances the workflow state. */
+export async function generateCertificateForRecord(recordId: string, generatedByUserId: string) {
+  const preRecord = await prisma.calibrationRecord.findUniqueOrThrow({ where: { id: recordId } });
+  const toState = assertTransition(preRecord.status, "GENERATE_DOCUMENT");
+  const calibrationDate = preRecord.submittedAt ?? preRecord.createdAt;
+  const certificateNumber = await nextCertificateNumber(calibrationDate);
+
+  let built;
   try {
-    renderResult = renderWordTemplate(templateFilePath, data);
+    built = await renderCertificateBuffer(recordId, certificateNumber);
   } catch (err) {
     // Fail closed (Section 42 self-review): a failed render must not
     // advance workflow state or create a GeneratedDocument row.
@@ -153,14 +168,15 @@ export async function generateCertificateForRecord(recordId: string, generatedBy
       userId: generatedByUserId,
       eventType: "DOCUMENT_GENERATION_FAILED",
       entityType: "CalibrationRecord",
-      entityId: record.id,
-      summary: `Word document generation failed for record ${record.id}`,
+      entityId: recordId,
+      summary: `Word document generation failed for record ${recordId}`,
       details: { message: err instanceof Error ? err.message : String(err) },
     });
     throw err;
   }
+  const { record, templateRevision, renderResult, rendererKey } = built;
 
-  const filename = `${record.procedure.rendererKey}-${common.certificateNumber}.docx`;
+  const filename = `${rendererKey}-${certificateNumber}.docx`;
   const { storagePath } = persistGeneratedDocument(renderResult.buffer, filename);
 
   const [generatedDocument] = await prisma.$transaction([
@@ -191,8 +207,10 @@ export async function generateCertificateForRecord(recordId: string, generatedBy
   return generatedDocument;
 }
 
-function addMonths(date: Date, months: number): Date {
-  const d = new Date(date);
-  d.setMonth(d.getMonth() + months);
-  return d;
+/** Technician-facing, pre-submission preview: same renderer and template,
+ * no certificate number allocated, nothing written to the database or the
+ * workflow state — safe to call repeatedly from DRAFT. */
+export async function previewCertificateForRecord(recordId: string) {
+  const { renderResult, rendererKey } = await renderCertificateBuffer(recordId, "PREVIEW — NOT YET ISSUED");
+  return { buffer: renderResult.buffer, filename: `${rendererKey}-preview.docx` };
 }
