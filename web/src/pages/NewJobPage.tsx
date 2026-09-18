@@ -82,8 +82,11 @@ export function NewJobPage() {
   }, [siteId, assetQuery]);
 
   const isNewCustomer = customerId === "__new__";
-  const isNewSite = siteId === "__new__";
-  const isNewAsset = assetId === "__new__";
+  // A brand new customer has no sites yet, and a brand new site has no
+  // assets yet — each cascades into the next, so the form (and what gets
+  // submitted) doesn't get stuck expecting a selection that can't exist.
+  const isNewSite = siteId === "__new__" || isNewCustomer;
+  const isNewAsset = assetId === "__new__" || isNewSite;
 
   useEffect(() => {
     if (!isNewAsset || !newAsset.model.trim()) {
@@ -201,7 +204,7 @@ export function NewJobPage() {
               </select>
             </div>
           )}
-          {(isNewSite || isNewCustomer) && (
+          {isNewSite && (
             <div className="field-row">
               <div className="field"><label>Site label</label><input type="text" value={newSite.label} onChange={(e) => setNewSite({ ...newSite, label: e.target.value })} /></div>
               <div className="field"><label>Address line 1</label><input type="text" value={newSite.addressLine1} onChange={(e) => setNewSite({ ...newSite, addressLine1: e.target.value })} /></div>
@@ -214,10 +217,10 @@ export function NewJobPage() {
         </div>
       )}
 
-      {(siteId || isNewSite || isNewCustomer) && (
+      {(siteId || isNewSite) && (
         <div className="panel">
           <h3>Asset / Unit Under Test</h3>
-          {!isNewSite && !isNewCustomer && (
+          {!isNewSite && (
             <div className="field-row">
               <div className="field" style={{ flex: 2 }}>
                 <label>Search assets (number, description, serial)</label>
@@ -242,7 +245,7 @@ export function NewJobPage() {
               </div>
             </div>
           )}
-          {(isNewAsset || isNewSite || isNewCustomer) && (
+          {isNewAsset && (
             <div className="field-row">
               <div className="field"><label>Asset number</label><input type="text" value={newAsset.assetNumber} onChange={(e) => setNewAsset({ ...newAsset, assetNumber: e.target.value })} /></div>
               <div className="field"><label>Description</label><input type="text" value={newAsset.description} onChange={(e) => setNewAsset({ ...newAsset, description: e.target.value })} /></div>

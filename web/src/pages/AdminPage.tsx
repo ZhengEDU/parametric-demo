@@ -1,18 +1,19 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../api/client";
 import { useAuth } from "../state/AuthContext";
-import type { EquipmentModel, Procedure } from "../api/types";
+import type { EquipmentModel, Procedure, ReferenceStandard } from "../api/types";
 
 interface AdminUser { id: string; email: string; fullName: string; role: string; active: boolean }
 interface AdminAsset { id: string; assetNumber: string; description: string; customer: { name: string }; site: { label: string }; defaultProcedure: { name: string } | null }
 interface AdminCustomer { id: string; name: string; sites: { id: string; label: string; city: string; state: string }[]; contacts: { id: string; name: string; phone: string | null; email: string | null }[]; assets: unknown[] }
 
 const EMPTY_MODEL_FORM = { manufacturer: "", model: "", description: "", accuracy: "", range: "", calibrationIntervalMonths: "", defaultProcedureId: "" };
+const EMPTY_STANDARD_FORM = { idNumber: "", manufacturer: "", model: "", description: "", calDue: "" };
 
 export function AdminPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "ADMIN";
-  const [tab, setTab] = useState<"users" | "customers" | "assets" | "models">("users");
+  const [tab, setTab] = useState<"users" | "customers" | "assets" | "models" | "standards">("users");
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [customers, setCustomers] = useState<AdminCustomer[] | null>(null);
   const [assets, setAssets] = useState<AdminAsset[] | null>(null);
@@ -21,9 +22,17 @@ export function AdminPage() {
   const [modelForm, setModelForm] = useState(EMPTY_MODEL_FORM);
   const [modelError, setModelError] = useState<string | null>(null);
   const [savingModel, setSavingModel] = useState(false);
+  const [standards, setStandards] = useState<ReferenceStandard[] | null>(null);
+  const [standardForm, setStandardForm] = useState(EMPTY_STANDARD_FORM);
+  const [standardError, setStandardError] = useState<string | null>(null);
+  const [savingStandard, setSavingStandard] = useState(false);
 
   function reloadModels() {
     api.get<{ models: EquipmentModel[] }>("/equipment-models").then((r) => setModels(r.models));
+  }
+
+  function reloadStandards() {
+    api.get<{ standards: ReferenceStandard[] }>("/standards").then((r) => setStandards(r.standards));
   }
 
   useEffect(() => {
@@ -31,6 +40,7 @@ export function AdminPage() {
     api.get<{ customers: AdminCustomer[] }>("/admin/customers").then((r) => setCustomers(r.customers));
     api.get<{ assets: AdminAsset[] }>("/admin/assets").then((r) => setAssets(r.assets));
     reloadModels();
+    reloadStandards();
     api.get<{ procedures: Procedure[] }>("/intake/procedures").then((r) => setProcedures(r.procedures));
   }, []);
 
@@ -62,6 +72,29 @@ export function AdminPage() {
     reloadModels();
   }
 
+  async function handleAddStandard() {
+    setStandardError(null);
+    if (!standardForm.idNumber.trim() || !standardForm.manufacturer.trim() || !standardForm.model.trim() || !standardForm.description.trim() || !standardForm.calDue) {
+      setStandardError("ID number, manufacturer, model, description, and calibration due date are all required.");
+      return;
+    }
+    setSavingStandard(true);
+    try {
+      await api.post("/standards", standardForm);
+      setStandardForm(EMPTY_STANDARD_FORM);
+      reloadStandards();
+    } catch (err) {
+      setStandardError(err instanceof ApiError ? err.message : "Failed to add standard");
+    } finally {
+      setSavingStandard(false);
+    }
+  }
+
+  async function handleToggleStandardActive(s: ReferenceStandard) {
+    await api.patch(`/standards/${s.id}`, { active: !s.active });
+    reloadStandards();
+  }
+
   return (
     <div>
       <h1>Admin</h1>
@@ -74,6 +107,7 @@ export function AdminPage() {
         <button className={tab === "customers" ? "primary" : ""} onClick={() => setTab("customers")}>Customers</button>
         <button className={tab === "assets" ? "primary" : ""} onClick={() => setTab("assets")}>Assets</button>
         <button className={tab === "models" ? "primary" : ""} onClick={() => setTab("models")}>Models</button>
+        <button className={tab === "standards" ? "primary" : ""} onClick={() => setTab("standards")}>Standards</button>
       </div>
 
       {tab === "users" && (
@@ -211,6 +245,92 @@ export function AdminPage() {
                 ))}
                 {models?.length === 0 && (
                   <tr><td colSpan={isAdmin ? 7 : 6} className="muted">No models in the catalog yet.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {tab === "standards" && (
+        <div>
+          {isAdmin && (
+            <div className="panel">
+              <h3>Add a Reference Standard</h3>
+              <p className="muted small">
+                Standards added here appear in the "Standards Utilized" picker technicians use while filling out a
+                calibration record. Retiring one (instead of deleting it) keeps it visible on any past record that
+                already cites it.
+              </p>
+              {standardError && <div className="error-box">{standardError}</div>}
+              <div className="field-row">
+                <div className="field">
+                  <label>ID number</label>
+                  <input type="text" value={standardForm.idNumber} onChange={(e) => setStandardForm({ ...standardForm, idNumber: e.target.value })} placeholder="e.g. STD-0142" />
+                </div>
+                <div className="field">
+                  <label>Manufacturer</label>
+                  <input type="text" value={standardForm.manufacturer} onChange={(e) => setStandardForm({ ...standardForm, manufacturer: e.target.value })} />
+                </div>
+                <div className="field">
+                  <label>Model</label>
+                  <input type="text" value={standardForm.model} onChange={(e) => setStandardForm({ ...standardForm, model: e.target.value })} />
+                </div>
+              </div>
+              <div className="field-row">
+                <div className="field" style={{ flex: 2 }}>
+                  <label>Description</label>
+                  <input type="text" value={standardForm.description} onChange={(e) => setStandardForm({ ...standardForm, description: e.target.value })} placeholder="e.g. Class F 1kg mass set, NIST-traceable" />
+                </div>
+                <div className="field">
+                  <label>Calibration due date</label>
+                  <input type="date" value={standardForm.calDue} onChange={(e) => setStandardForm({ ...standardForm, calDue: e.target.value })} />
+                </div>
+              </div>
+              <div className="btn-row">
+                <button className="primary" onClick={handleAddStandard} disabled={savingStandard}>
+                  {savingStandard ? "Adding…" : "Add Standard"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="panel table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID Number</th>
+                  <th>Manufacturer</th>
+                  <th>Model</th>
+                  <th>Description</th>
+                  <th>Cal Due</th>
+                  <th>Active</th>
+                  {isAdmin && <th></th>}
+                </tr>
+              </thead>
+              <tbody>
+                {standards?.map((s) => {
+                  const overdue = s.active && new Date(s.calDue) < new Date();
+                  return (
+                    <tr key={s.id}>
+                      <td className="mono">{s.idNumber}</td>
+                      <td>{s.manufacturer}</td>
+                      <td>{s.model}</td>
+                      <td>{s.description}</td>
+                      <td style={overdue ? { color: "var(--danger)", fontWeight: 600 } : undefined}>{new Date(s.calDue).toLocaleDateString()}{overdue ? " (overdue)" : ""}</td>
+                      <td>{s.active ? "Yes" : "No"}</td>
+                      {isAdmin && (
+                        <td>
+                          <button type="button" className="flag-btn" onClick={() => handleToggleStandardActive(s)}>
+                            {s.active ? "Retire" : "Reactivate"}
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+                {standards?.length === 0 && (
+                  <tr><td colSpan={isAdmin ? 7 : 6} className="muted">No reference standards on file yet.</td></tr>
                 )}
               </tbody>
             </table>
