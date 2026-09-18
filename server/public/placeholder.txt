@@ -1,0 +1,5 @@
+This project is an API only — see server/vercel.json, which rewrites every
+real request to the api/index.ts serverless function. This file exists
+only to give Vercel's "Other" framework preset a non-empty static output
+directory to find; it's deliberately not named index.html (or anything
+else that could match a real route) so it never intercepts a request.
